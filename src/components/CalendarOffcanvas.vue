@@ -62,7 +62,7 @@ const calendarAttributes = computed(() => {
 </template>
 <style scoped>
 .offcanvas{
-  width: 30vw;
+  width: 90vw;
   height: 80vh;
   margin-top:-20%;
   z-index: 9999;
