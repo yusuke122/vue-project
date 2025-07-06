@@ -75,16 +75,16 @@ const calendarAttributes = computed(() => {
   --vc-highlight-solid-content-color: #ffffff;
 }*/
 
-::v-deep .vc-light.vc-attr {
+:deep(.vc-light.vc-attr){
   --vc-highlight-outline-bg: #ef0303;
   --vc-highlight-outline-border: rgb(226, 20, 106);
   --vc-highlight-outline-content-color: #10b981;
 }
 /* もし .vc-highlight-outline が親要素に付くなら… */
-::v-deep .vc-light .vc-highlight-outline {
+:deep(.vc-light .vc-highlight-outline) {
   --vc-highlight-outline-border: rgb(226,20,106);
 }
-::v-deep .vc-light .selected-outline {
+:deep(.vc-light .selected-outline) {
   --vc-highlight-outline-bg:    #ef0303;
   --vc-highlight-outline-border: rgb(226,20,106);
   --vc-highlight-outline-content-color: #10b981;
