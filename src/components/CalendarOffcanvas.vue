@@ -84,7 +84,7 @@ const calendarAttributes = computed(() => {
 :deep(.vc-light .vc-highlight-outline) {
   --vc-highlight-outline-border: rgb(226,20,106);
 }
-:deep(.vc-light .selected-outline) {
+:deep(.vc-light .selected-outline){
   --vc-highlight-outline-bg:    #ef0303;
   --vc-highlight-outline-border: rgb(226,20,106);
   --vc-highlight-outline-content-color: #10b981;
