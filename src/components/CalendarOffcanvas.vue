@@ -41,9 +41,6 @@ const calendarAttributes = computed(() => {
 })
 </script>
 <template>
-<button class="btn btn-primary" type="button" data-bs-toggle="offcanvas" data-bs-target="#staticBackdrop" aria-controls="staticBackdrop">
-  Toggle static offcanvas
-</button>
 
 <div class="offcanvas" data-bs-backdrop="static" tabindex="-1" id="staticBackdrop" aria-labelledby="staticBackdropLabel">
   <div class="offcanvas-header">
