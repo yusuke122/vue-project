@@ -2,7 +2,7 @@
 import HelloWorld from './components/HelloWorld.vue'
 import TheWelcome from './components/TheWelcome.vue'
 import Spinner from './components/Spinner.vue'
-import CalendarOffcanvas from './components/calendarOffcanvas.vue'
+import CalendarOffcanvas from './components/CalendarOffcanvas.vue'
 import {ref,provide,inject} from 'vue'
 
 const isShowLoading = ref(false)
