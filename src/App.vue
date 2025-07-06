@@ -25,7 +25,7 @@ provide('hideLoading',hideLoading)
   </header>
 
   <main>
-    <TheWelcome />
+    <!--TheWelcome /-->
     <Spinner v-if="isShowLoading"/>
     <CalendarOffcanvas />
   </main>
