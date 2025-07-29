@@ -1,9 +1,9 @@
 <script setup>
-import HelloWorld from './components/HelloWorld.vue'
+import GraphOffcanvas from './components/GraphOffcanvas.vue'
 import TheWelcome from './components/TheWelcome.vue'
 import Spinner from './components/Spinner.vue'
-import CalendarOffcanvas from './components/calendarOffcanvas.vue'
-import {ref,provide,inject} from 'vue'
+import CalendarOffcanvas from './components/CalendarOffcanvas.vue'
+import {ref,provide,inject, nextTick} from 'vue'
 
 const isShowLoading = ref(false)
 function showLoading(){
@@ -12,15 +12,20 @@ function showLoading(){
 function hideLoading(){
   isShowLoading.value = false
 };
+const max = ref(105)
 provide('showLoading',showLoading)
 provide('hideLoading',hideLoading)
+function changeMax(){
+  max.value = Math.floor(Math.random()*10)+100
+}
 </script>
 <template>
   <header>
-    <img alt="Vue logo" class="logo" src="./assets/logo.svg" width="125" height="125" />
-
     <div class="wrapper">
-      <HelloWorld msg="You did it!" />
+      <button @click="changeMax">click:{{ max }}</button>
+      <div v-if="max>105">
+      <GraphOffcanvas :max="max"/>
+      </div>
     </div>
   </header>
 
@@ -56,6 +61,7 @@ header {
     display: flex;
     place-items: flex-start;
     flex-wrap: wrap;
+    scale:calc(1.3)
   }
 }
 </style>

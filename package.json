@@ -11,10 +11,13 @@
   "dependencies": {
     "axios": "^1.10.0",
     "bootstrap": "^5.3.7",
+    "chartjs": "^0.3.24",
+    "chartjs-adapter-date-fns": "^3.0.0",
     "cors": "^2.8.5",
     "tablesort": "^5.6.0",
     "v-calendar": "^3.1.2",
-    "vue": "^3.5.17"
+    "vue": "^3.5.17",
+    "vue-chartjs": "^5.3.2"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.0",
