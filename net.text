@@ -1,0 +1,642 @@
+状況、非常に詳細にありがとうございます。ここまでの情報から、物理的な接続は生きているが、IPレベルの通信が遮断されているという症状ですね。ARPでMACアドレスが見えているのに ping が通らないというのは、ネットワークトラブルの中でもかなり絞り込みやすい状態です。
+
+---
+
+🧠 疑わしいポイント（優先度順）
+
+✅ 1. Ubuntu仮想マシン側のファイアウォール（ufw / iptables）設定
+
+Apache再起動時に `ufw` や `iptables` が変更された可能性があります。
+
+🔍 チェック方法：
+
+sudo ufw status
+sudo iptables -L -n
+
+
+🔧 対処：
+
+sudo ufw disable
+# または
+sudo ufw allow from 10.1.1.0/24
+sudo ufw allow 80/tcp
+
+
+---
+
+✅ 2. 仮想NICの状態（eth1）とルーティング設定
+
+`ip addr` で `eth1` に `10.1.1.2` が割り当てられているのはOK。ただし、デフォルトルートやARPキャッシュの不整合があると通信できません。
+
+🔍 チェック：
+
+ip route
+arp -n
+
+
+🔧 対処：
+
+sudo ip route add default via 10.1.1.1 dev eth1
+sudo ip neigh flush all
+
+
+---
+
+✅ 3. Apacheの再起動によるネットワークスタックの干渉
+
+Apache再起動時に `systemd` や `networkd` が巻き込まれて、仮想NICが一時的に切断された可能性もあります。
+
+🔍 チェック：
+
+systemctl status apache2
+systemctl status networking
+
+
+🔧 対処：
+
+sudo systemctl restart networking
+sudo systemctl restart apache2
+
+
+---
+
+✅ 4. web.tar.gz の展開先のパーミッションやSELinux/AppArmor
+
+もし `web.tar.gz` を `/var/www/html` に展開した際に、パーミッションが変わってしまった場合、Apacheがエラーを起こしてネットワーク応答しないことがあります。
+
+🔍 チェック：
+
+ls -l /var/www/html
+
+
+🔧 対処：
+
+sudo chown -R www-data:www-data /var/www/html
+sudo chmod -R 755 /var/www/html
+
+
+---
+
+✅ 5. Hyper-Vの仮想スイッチが再接続されていない
+
+Apache再起動時に仮想マシンが一時的にネットワークから切断され、Hyper-Vの外部スイッチが再接続されていない可能性もあります。
+
+🔍 チェック：
+
+• Hyper-Vマネージャーで仮想マシンのネットワークアダプターが外部スイッチに接続されているか確認
+• 仮想スイッチマネージャーで外部スイッチが有効か確認
+
+
+---
+
+🧪 テスト用コマンドまとめ
+
+仮想マシン内で以下を順に試してみてください：
+
+# 1. ネットワーク再起動
+sudo systemctl restart networking
+
+# 2. Apache再起動
+sudo systemctl restart apache2
+
+# 3. ファイアウォール無効化
+sudo ufw disable
+
+# 4. ARPキャッシュクリア
+sudo ip neigh flush all
+
+# 5. ルート確認
+ip route
+
+
+---
+
+🧭 もしそれでも解決しない場合
+
+• `tcpdump` を使ってパケットが届いているか確認する
+• `dmesg` や `journalctl` でApacheやネットワーク関連のログを確認する
+• 仮想マシンを一度シャットダウン → Hyper-Vでネットワークアダプターを再接続 → 再起動
+
+
+---
+
+必要なら、`web.tar.gz` の展開スクリプトやApacheの設定ファイルも一緒に見ていきましょう。ここまでの対応でかなり絞り込めるはずです。どこまで試されたか、教えていただければ次の一手を提案します。
+
+
+
+
+なるほど、状況を整理すると：
+
+• 一度メモリ不足で仮想マシンの起動に失敗
+• その後、不要な（重い）ファイルを削除
+• 配布されたZIPから再構成しても、仮想マシンがうまく起動しない
+
+
+という流れですね。ここで「キャッシュ？」と疑われているのは非常に鋭い視点です。Hyper-VやUbuntu環境では、キャッシュや一時ファイルの残留が原因で再構成がうまくいかないことは確かにあります。ただし、他にも考えられる要因があるので、順に整理してみましょう。
+
+---
+
+🧠 疑わしいポイントと対処法
+
+✅ 1. Hyper-Vの仮想マシンキャッシュ・残留構成
+
+Hyper-Vは仮想マシンの構成情報を一部ローカルに保持しているため、同じ名前のVMを再インポートすると不整合が起きることがあります。
+
+🔧 対処法：
+
+• Hyper-Vマネージャーで該当VMを完全に削除（構成とチェックポイント含む）
+• `%ProgramData%\Microsoft\Windows\Hyper-V` フォルダを確認し、残留ファイルがあれば削除（慎重に！）
+• ZIPを再解凍し、別のフォルダ名でインポート（VM名も変更）
+
+
+---
+
+✅ 2. 仮想ハードディスク（.vhdx）の破損や不整合
+
+メモリ不足時に仮想マシンが強制終了された場合、`.vhdx` ファイルが破損している可能性もあります。
+
+🔍 チェック：
+
+• 仮想マシン起動時に「ブート失敗」や「OSが見つかりません」などのエラーが出るか
+• `Inspect Disk` 機能で `.vhdx` の整合性を確認
+
+
+---
+
+✅ 3. Ubuntu側の一時ファイルやDockerキャッシュ
+
+もし仮想マシンが起動しても、DockerやApacheがうまく動かない場合は、以前の展開ファイルやキャッシュが干渉している可能性があります。
+
+🔧 対処法：
+
+# Dockerのキャッシュクリア
+docker system prune -a
+
+# Apacheのキャッシュや一時ファイル削除
+sudo rm -rf /var/www/html/*
+sudo systemctl restart apache2
+
+
+---
+
+✅ 4. ZIPファイルの展開ミスや破損
+
+ZIPファイルを展開した際に、ファイルが完全に展開されていないケースもあります。特に `.vmcx` や `.vhdx` が部分的に壊れていると、Hyper-Vが正しく認識できません。
+
+🔍 チェック：
+
+• ZIPファイルのサイズと展開後のファイルサイズが一致しているか
+• 展開時にエラーが出ていないか
+• 別の解凍ツール（例：7-Zip）で再展開してみる
+
+
+---
+
+🧭 おすすめの再構成手順（クリーンな状態で）
+
+1. Hyper-Vマネージャーで既存VMを完全削除
+2. `%ProgramData%\Microsoft\Windows\Hyper-V` の残留ファイルを確認
+3. ZIPファイルを 新しいフォルダ名 で展開
+4. Hyper-Vで「仮想マシンのインポート」→「新しいIDで登録」
+5. 起動後、`web.tar.gz` を差し替え → Apache再起動
+
+
+---
+
+もし仮想マシンの起動ログやエラーメッセージがあれば、それをもとにさらに深掘りできます。どのタイミングで「うまくいかない」のか、もう少し詳しく教えてもらえれば、ピンポイントで対処できますよ。
+
+
+
+`sudo chown` コマンドが適切に実行され、所有者が正しく変更されたかどうかを確認するには、以下の方法が確実です。
+
+---
+
+✅ 所有者変更の確認方法
+
+🔍 1. `ls -l` コマンドで確認
+
+変更したディレクトリやファイルに対して以下を実行：
+
+ls -l /var/www/html
+
+
+または、特定のファイルを確認したい場合：
+
+ls -l /var/www/html/index.html
+
+
+🔎 出力例：
+
+-rw-r--r-- 1 www-data www-data  1024 Sep  4 19:30 index.html
+
+
+このように、左から3番目と4番目の項目が所有者とグループです。`www-data www-data` になっていれば、Apacheが正常にアクセスできる状態です。
+
+---
+
+🧪 2. `stat` コマンドで詳細確認
+
+より詳細に確認したい場合は：
+
+stat /var/www/html/index.html
+
+
+出力例：
+
+Access: 2025-09-04 19:30:00.000000000 +0900
+Modify: 2025-09-04 19:30:00.000000000 +0900
+Change: 2025-09-04 19:30:00.000000000 +0900
+Birth: -
+Uid: (  33/www-data)   Gid: (  33/www-data)
+
+
+ここで `Uid` と `Gid` が `www-data` になっていれば成功です。
+
+---
+
+🧠 補足：Apacheがアクセスできるかどうかの実動作確認
+
+所有権が正しくても、パーミッションが不十分だとApacheが読み込めません。以下も合わせて確認：
+
+sudo chmod -R 755 /var/www/html
+
+
+その後、Apacheを再起動：
+
+sudo systemctl restart apache2
+
+
+そしてブラウザや `curl` でアクセス確認：
+
+curl http://localhost
+
+
+---
+
+もし `ls -l` や `stat` で所有者が変わっていない場合は、`sudo chown` の対象パスが間違っていた可能性があります。再度以下のように実行してみてください：
+
+sudo chown -R www-data:www-data /var/www/html
+
+
+---
+
+必要なら、Apacheのログ（`/var/log/apache2/error.log`）も確認して、読み込みエラーが出ていないかチェックできますよ。何か表示されているようなら、内容を教えてもらえれば一緒に原因を探れます。
+
+
+
+ありがとうございます、状況がよく見えてきました。
+Webアプリ自体は起動しているが、`index.html` が参照している CSS や JS が最新の `/var/opt/robust/web/assets` と一致していないということですね。
+
+これは典型的な「フロントエンドのパス不整合」や「キャッシュの残留」「シンボリックリンクの未更新」などが原因で起こることが多いです。以下に確認ポイントと対処法を整理します。
+
+---
+
+🔍 原因として考えられること
+
+✅ 1. `index.html` の参照パスが古い
+
+• `index.html` 内で `<link>` や `<script>` タグが `/assets/old.css` など古いパスを参照している可能性
+
+
+🔧 対処：
+
+• `index.html` を開いて、参照している CSS/JS のパスを確認
+• 最新の `/var/opt/robust/web/assets` に合わせて修正
+
+
+---
+
+✅ 2. Apacheのドキュメントルートが `/var/www/html` のまま
+
+• `index.html` は `/var/www/html` にあるが、最新の `assets` は `/var/opt/robust/web/assets` にあるため、参照できない
+
+
+🔧 対処案①：`assets` をコピー
+
+sudo cp -r /var/opt/robust/web/assets /var/www/html/
+
+
+🔧 対処案②：シンボリックリンクを張る
+
+sudo ln -s /var/opt/robust/web/assets /var/www/html/assets
+
+
+Apacheがシンボリックリンクを許可している必要があります。`/etc/apache2/apache2.conf` の `<Directory>` 設定で `Options FollowSymLinks` が有効か確認してください。
+
+---
+
+✅ 3. ブラウザキャッシュが古いファイルを保持している
+
+• 特に `.css` や `.js` はキャッシュされやすいため、更新しても反映されないことがあります
+
+
+🔧 対処：
+
+• ブラウザで「キャッシュをクリア」または「ハードリロード（Ctrl+F5）」を実行
+• 開発者ツールで「Disable cache」にチェックを入れて確認
+
+
+---
+
+✅ 4. Apacheの設定が古いディレクトリを指している
+
+• `DocumentRoot` や `Alias` の設定が `/var/opt/robust/web` を参照していない可能性
+
+
+🔍 チェック：
+
+cat /etc/apache2/sites-enabled/000-default.conf
+
+
+🔧 修正例：
+
+DocumentRoot /var/opt/robust/web
+<Directory /var/opt/robust/web>
+    Options Indexes FollowSymLinks
+    AllowOverride All
+    Require all granted
+</Directory>
+
+
+その後 Apache を再起動：
+
+sudo systemctl restart apache2
+
+
+---
+
+✅ 動作確認の手順まとめ
+
+1. `index.html` の参照パスを確認・修正
+2. `assets` を `html` 配下にコピーまたはリンク
+3. Apacheの設定を見直し、必要なら `DocumentRoot` を変更
+4. ブラウザキャッシュをクリアして再確認
+
+
+---
+
+もし `index.html` の中身を一部共有いただければ、どのパスが問題か一緒に見ていくこともできますよ。また、Apacheのログにエラーが出ていれば、それもヒントになります。どこまで試されたか教えていただければ、次の一手を提案します。
+
+
+この状況、かなり絞り込めてきましたね。
+ローカル（PC）ではWebアプリが正常に表示されるが、タブレットからはIP疎通すらできないということから、以下のように優先度をつけて疑うべきポイントを整理します。
+
+---
+
+🔍 最も疑わしいポイント（優先度順）
+
+🟥 1. Ubuntu仮想マシンのファイアウォール設定（ufw / iptables）
+
+• ローカルでは `localhost` 経由でアクセスできるが、外部（タブレット）からの通信が遮断されている可能性が高いです。
+• 特に `ufw` が有効になっていて、外部IPからのアクセスを拒否しているケースが多いです。
+
+
+✅ 対処：
+
+sudo ufw status
+sudo ufw disable
+# または
+sudo ufw allow from 10.1.1.0/24
+sudo ufw allow 80/tcp
+
+
+---
+
+🟧 2. 仮想マシンのネットワーク設定（IP・ルーティング）
+
+• `ip addr` で `eth1 inet 10.1.1.2` が確認できているのは良いですが、デフォルトゲートウェイが設定されていないと外部との疎通ができません。
+
+
+✅ チェック：
+
+ip route
+
+
+✅ 対処：
+
+sudo ip route add default via 10.1.1.1 dev eth1
+
+
+---
+
+🟨 3. Hyper-Vの外部仮想スイッチが正しく接続されていない
+
+• 仮想マシンのネットワークアダプターが外部スイッチに接続されているか、Hyper-Vマネージャーで再確認
+• スイッチが物理NICに正しくバインドされているかも確認
+
+
+---
+
+🟩 4. Apacheが外部IPからの接続を拒否している
+
+• Apacheの設定で `Listen` や `VirtualHost` が `127.0.0.1` に限定されていると、外部からのアクセスが拒否されます
+
+
+✅ チェック：
+
+cat /etc/apache2/ports.conf
+cat /etc/apache2/sites-enabled/000-default.conf
+
+
+✅ 修正例：
+
+Listen 80
+<VirtualHost *:80>
+    DocumentRoot /var/www/html
+    ...
+</VirtualHost>
+
+
+---
+
+🟦 5. ARPは通っているがICMP（ping）やTCPが遮断されている
+
+• ARPでMACアドレスが見えているなら、L2レベルでは接続されている
+• それでも ping が通らないなら、ICMPがブロックされている可能性（ファイアウォールやセキュリティソフト）
+
+
+---
+
+✅ 優先的に試すべきアクションまとめ
+
+# 1. ファイアウォール無効化
+sudo ufw disable
+
+# 2. ルート設定確認・追加
+ip route
+sudo ip route add default via 10.1.1.1 dev eth1
+
+# 3. Apache設定確認
+sudo systemctl restart apache2
+
+# 4. ネットワーク再起動
+sudo systemctl restart networking
+
+
+---
+
+このあたりを順に確認すれば、タブレットからの疎通も回復する可能性が高いです。もしそれでもダメなら、`tcpdump` でパケットの流れを見てみるのも有効です。必要ならその使い方もご案内しますよ。
+
+
+
+
+この状況、かなり絞り込めてきましたね。
+ローカル（PC）ではWebアプリが正常に表示されるが、タブレットからはIP疎通すらできないということから、以下のように優先度をつけて疑うべきポイントを整理します。
+
+---
+
+🔍 最も疑わしいポイント（優先度順）
+
+🟥 1. Ubuntu仮想マシンのファイアウォール設定（ufw / iptables）
+
+• ローカルでは `localhost` 経由でアクセスできるが、外部（タブレット）からの通信が遮断されている可能性が高いです。
+• 特に `ufw` が有効になっていて、外部IPからのアクセスを拒否しているケースが多いです。
+
+
+✅ 対処：
+
+sudo ufw status
+sudo ufw disable
+# または
+sudo ufw allow from 10.1.1.0/24
+sudo ufw allow 80/tcp
+
+
+---
+
+🟧 2. 仮想マシンのネットワーク設定（IP・ルーティング）
+
+• `ip addr` で `eth1 inet 10.1.1.2` が確認できているのは良いですが、デフォルトゲートウェイが設定されていないと外部との疎通ができません。
+
+
+✅ チェック：
+
+ip route
+
+
+✅ 対処：
+
+sudo ip route add default via 10.1.1.1 dev eth1
+
+
+---
+
+🟨 3. Hyper-Vの外部仮想スイッチが正しく接続されていない
+
+• 仮想マシンのネットワークアダプターが外部スイッチに接続されているか、Hyper-Vマネージャーで再確認
+• スイッチが物理NICに正しくバインドされているかも確認
+
+
+---
+
+🟩 4. Apacheが外部IPからの接続を拒否している
+
+• Apacheの設定で `Listen` や `VirtualHost` が `127.0.0.1` に限定されていると、外部からのアクセスが拒否されます
+
+
+✅ チェック：
+
+cat /etc/apache2/ports.conf
+cat /etc/apache2/sites-enabled/000-default.conf
+
+
+✅ 修正例：
+
+Listen 80
+<VirtualHost *:80>
+    DocumentRoot /var/www/html
+    ...
+</VirtualHost>
+
+
+---
+
+🟦 5. ARPは通っているがICMP（ping）やTCPが遮断されている
+
+• ARPでMACアドレスが見えているなら、L2レベルでは接続されている
+• それでも ping が通らないなら、ICMPがブロックされている可能性（ファイアウォールやセキュリティソフト）
+
+
+---
+
+✅ 優先的に試すべきアクションまとめ
+
+# 1. ファイアウォール無効化
+sudo ufw disable
+
+# 2. ルート設定確認・追加
+ip route
+sudo ip route add default via 10.1.1.1 dev eth1
+
+# 3. Apache設定確認
+sudo systemctl restart apache2
+
+# 4. ネットワーク再起動
+sudo systemctl restart networking
+
+
+---
+
+このあたりを順に確認すれば、タブレットからの疎通も回復する可能性が高いです。もしそれでもダメなら、`tcpdump` でパケットの流れを見てみるのも有効です。必要ならその使い方もご案内しますよ。
+
+
+
+
+とても重要なポイントですね。
+タブレットから仮想マシン（Ubuntu + Docker + Apache）にアクセスできていた設定は、Dockerの作成時ではなく、主に以下の3つのレイヤーで構成されていた可能性が高いです：
+
+---
+
+🧭 1. Hyper-Vのネットワーク設定（外部仮想スイッチ）
+
+これは最も根本的な部分です。タブレットなど外部デバイスからアクセスするには、仮想マシンが物理ネットワークと同じセグメントに接続されている必要があります。
+
+• Hyper-Vで「外部スイッチ」を作成し、物理NIC（Wi-FiやLAN）に接続
+• 仮想マシンのネットワークアダプターをこの外部スイッチに割り当て
+• Ubuntuに静的IP（例：10.1.1.2）を設定
+
+
+✅ この設定がなければ、タブレットからの直接アクセスはできません。
+
+---
+
+🐧 2. Ubuntu仮想マシンのIP設定とファイアウォール
+
+• `netplan` などで静的IP（10.1.1.2）を設定
+• `ufw` や `iptables` でポート80（HTTP）を許可
+• `ping` や `curl` で外部からの疎通確認
+
+
+✅ DockerやApacheが動いていても、Ubuntu側が外部通信を遮断していればタブレットからは見えません。
+
+---
+
+🐳 3. Dockerコンテナのポート公開設定
+
+Dockerの作成時に `-p 80:80` のようなポートマッピングをしていれば、UbuntuのIPアドレス（10.1.1.2）でWebアプリにアクセス可能になります。
+
+docker run -d --name webapp -p 80:80 myapp:latest
+
+
+✅ ただし、これは「Ubuntu内でApacheを公開する」設定であり、タブレットからのアクセスを可能にするのはHyper-VとUbuntuのネットワーク設定です。
+
+---
+
+🔍 まとめ：どこで設定されていたか
+
+レイヤー	設定内容	タブレット参照に関与	
+Hyper-V	外部仮想スイッチの作成と割り当て	✅ 必須	
+Ubuntu	静的IP設定、ファイアウォール許可	✅ 必須	
+Docker	ポート公開（-p 80:80）	✅ 必須（Webアプリの起動）	
+Apache	Listen 80、DocumentRoot 設定	✅ 必須（Web表示）	
+
+
+---
+
+もし今タブレットからアクセスできなくなっているなら、Hyper-Vのスイッチが内部に変わっているか、UbuntuのIPが変わったか、ファイアウォールが有効になったかのいずれかが原因の可能性が高いです。
+
+必要なら、どの設定をどう確認すればいいか、コマンドレベルで一緒に見ていきましょう。どこから確認したいですか？
+
+
+
+ip addr show eth1
